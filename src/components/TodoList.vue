@@ -9,10 +9,10 @@
                 <thead>
                     <tr>
                         <th width="50px">No</th>
-                        <th @click="sortTodo('task')">タスク</th>
-                        <th width="150px" class="text-center" @click="sortTodo('registerDate')">登録日</th>
-                        <th width="150px" class="text-center" @click="sortTodo('expirationDate')">期限</th>
-                        <th width="120px" class="text-center" @click="sortTodo('progress')">進捗</th>
+                        <th class="link-primary" :class="sortMark('task')" @click="sortTodo('task')">タスク</th>
+                        <th width="150px" class="text-center link-primary" :class="sortMark('registerDate')" @click="sortTodo('registerDate')">登録日</th>
+                        <th width="150px" class="text-center link-primary" :class="sortMark('expirationDate')" @click="sortTodo('expirationDate')">期限</th>
+                        <th width="120px" class="text-center link-primary" :class="sortMark('progress')" @click="sortTodo('progress')">進捗</th>
                         <th width="100px" class="text-center">更新</th>
                         <th width="100px" class="text-center">削除</th>
                     </tr>
@@ -74,15 +74,15 @@
 
 <script lang="ts">
 import {Component, Prop, Emit, Vue} from 'vue-property-decorator'
-import {TodoRepository, TodoInfo, progress} from '@/repository/TodoRepository.ts'
+import {TodoRepository, TodoInfo, TodoRegisterInfo, progress} from '@/repository/TodoRepository.ts'
 import {parse, getDate, getMonth, getYear, isAfter} from 'date-fns'
 
 const todoRepository: TodoRepository = new TodoRepository()
 
 type DataType = {
-    progress: Array<String>
+    progress: Array<string>
     registeredTodo: Array<TodoInfo>
-    todoForm: TodoInfo
+    todoForm: TodoRegisterInfo
     message: string,
     sortStatus: SortStatus
 }
@@ -100,7 +100,6 @@ export default Vue.extend({
             progress: progress,
             registeredTodo: [],
             todoForm: {
-                id: 0,
                 task: "",
                 expirationDate: "",
                 progress: progress[0]
@@ -115,13 +114,13 @@ export default Vue.extend({
 
     created(): void {
         this.getAll()
-        this.sortTodo("progress")
     },
 
     methods: {
 
         getAll(): void {
             this.registeredTodo = todoRepository.getAll()
+            this.sortTodoWithSortOrder("progress", false)
         },
 
         register(): void {
@@ -149,8 +148,6 @@ export default Vue.extend({
                 return
             }
             this.message = "更新しました。"
-            this.getAll()
-            
         },
 
         deleteTodo(id: number) {
@@ -196,19 +193,12 @@ export default Vue.extend({
             
         },
 
-        sortTodo(sortKey: string): void {
-            
-            let sortingNum: number
-            // 同一キーに対してソートした場合、昇順と降順を切り替える
-            if (this.sortStatus.sortKey == sortKey) {
-                this.sortStatus.sortDesc = !this.sortStatus.sortDesc
-                sortingNum = this.sortStatus.sortDesc ? 1 : -1
-            } else {
-                // 前回ソート時とソートキーが変更された場合は昇順固定
-                this.sortStatus.sortKey = sortKey
-                this.sortStatus.sortDesc = false
-                sortingNum = -1
-            }
+        sortTodoWithSortOrder(sortKey: string, sortDesc: boolean): void {
+            // 現在のソート状態を保存
+            this.sortStatus.sortKey = sortKey
+            this.sortStatus.sortDesc = sortDesc
+
+            const sortingNum = sortDesc ? -1 : 1
             switch(sortKey) {
                 case("id"):
                     this.registeredTodo.sort((a, b) => a.id >= b.id ? sortingNum : sortingNum * -1)
@@ -228,6 +218,30 @@ export default Vue.extend({
                 default:
                     break;
             }
+        },
+
+        sortTodo(sortKey: string): void {
+            
+            // 同一キーに対してソートした場合、昇順と降順を切り替える
+            if (this.sortStatus.sortKey == sortKey) {
+                this.sortStatus.sortDesc = !this.sortStatus.sortDesc
+            } else {
+                // 前回ソート時とソートキーが変更された場合は昇順固定
+                this.sortStatus.sortKey = sortKey
+                this.sortStatus.sortDesc = false
+            }
+            this.sortTodoWithSortOrder(sortKey, this.sortStatus.sortDesc)
+        },
+
+        sortMark(columnName: string): string {
+            if (this.sortStatus.sortKey != columnName) {
+                return ""
+            }
+            if (this.sortStatus.sortDesc) {
+                return "sort_desc"
+            } else {
+                return "sort_asc"
+            }
         }
     }
 })
@@ -244,5 +258,11 @@ export default Vue.extend({
 .todo-form {
     margin: 0 auto;
     width: 60%;
+}
+.sort_asc:after {
+    content: '↑'
+}
+.sort_desc:after {
+    content: '↓'
 }
 </style>
