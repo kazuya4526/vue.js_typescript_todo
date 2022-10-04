@@ -55,9 +55,7 @@
                 <label class="form-label col-2" for="progress">進捗</label>
                 <div class="col-10">
                     <select class="form-control" id="progress" v-model="todoForm.progress">
-                        <option>{{progress[0]}}</option>
-                        <option>{{progress[1]}}</option>
-                        <option>{{progress[2]}}</option>
+                        <option v-for="prog in progress" :key="prog">{{prog}}</option>
                     </select>
                 </div>
             </div>
@@ -79,6 +77,7 @@ import {parse, getDate, getMonth, getYear, isAfter} from 'date-fns'
 
 const todoRepository: TodoRepository = new TodoRepository()
 
+// dataブロックで保持するオブジェクトの型情報
 type DataType = {
     progress: Array<string>
     registeredTodo: Array<TodoInfo>
@@ -87,6 +86,7 @@ type DataType = {
     sortStatus: SortStatus
 }
 
+// 現在のソート状態を表すオブジェクトの型情報
 type SortStatus = {
     sortKey: string,
     sortDesc: boolean
@@ -112,18 +112,22 @@ export default Vue.extend({
         }
     },
 
+    // TODO一覧を取得し表示
     created(): void {
         this.getAll()
     },
 
     methods: {
 
+        // TODO一覧を取得してdataに設定。初期ソート条件（進捗の昇順）でソートする。
         getAll(): void {
             this.registeredTodo = todoRepository.getAll()
             this.sortTodoWithSortOrder("progress", false)
         },
 
+        // TODO登録。
         register(): void {
+            // 登録。エラーが発生した場合はmessageを設定し処理終了。
             this.message = ""
             try {
                 todoRepository.register(this.todoForm)
@@ -131,15 +135,20 @@ export default Vue.extend({
                 this.message = e.message
                 return
             }
+
+            // Formのクリア
             this.todoForm.task = ""
             this.todoForm.expirationDate = ""
             this.todoForm.progress = this.progress[0]
 
             this.message = "登録しました。"
+
+            // データ再取得
             this.getAll()
             
         },
 
+        // TODO進捗更新
         update(id: number, progress: string): void {
             try {
                 todoRepository.update(id, progress)
@@ -150,6 +159,7 @@ export default Vue.extend({
             this.message = "更新しました。"
         },
 
+        // TODO削除
         deleteTodo(id: number) {
             try {
                 todoRepository.deleteTodo(id)
@@ -161,6 +171,7 @@ export default Vue.extend({
             this.getAll()
         },
 
+        // 日付項目を、画面表示用に加工。
         formatDate(dateStr: string): string {
             if (!dateStr) {
                 return ""
@@ -172,14 +183,17 @@ export default Vue.extend({
             return `${year}年${month}月${date}日`   
         },
 
+        // 進捗と期限によって列色を変える。優先順位は期限 > 進捗。
         decideRowColor(progress: string, expirationDate: string): string {
 
+            // 期限切れの場合は赤
             const eDate = parse(expirationDate, "yyyyMMdd", new Date())
             const cDate = new Date()
             if (progress != this.progress[2] && isAfter(cDate, eDate)) {
                 return "table-danger"
             }
 
+            // 進行中：緑、完了：灰
             switch(progress) {
                 case(this.progress[0]):
                     return ""
@@ -193,6 +207,19 @@ export default Vue.extend({
             
         },
 
+        // ソート。
+        sortTodo(sortKey: string): void {
+            
+            // 前回ソート時と同一の列に対してソートした場合、昇順と降順を切り替える
+            if (this.sortStatus.sortKey == sortKey) {
+                this.sortTodoWithSortOrder(sortKey, !this.sortStatus.sortDesc)
+            } else {
+                // 前回ソート時とソートキーが異なる場合は昇順固定
+                this.sortTodoWithSortOrder(sortKey, false)
+            }
+        },
+
+        // ソート順も直接指定してソート。
         sortTodoWithSortOrder(sortKey: string, sortDesc: boolean): void {
             // 現在のソート状態を保存
             this.sortStatus.sortKey = sortKey
@@ -200,39 +227,17 @@ export default Vue.extend({
 
             const sortingNum = sortDesc ? -1 : 1
             switch(sortKey) {
-                case("id"):
-                    this.registeredTodo.sort((a, b) => a.id >= b.id ? sortingNum : sortingNum * -1)
-                    break;
-                case("task"):
-                    this.registeredTodo.sort((a, b) => a.task > b.task ? sortingNum : sortingNum * -1)
-                    break;
-                case("registerDate"):
-                    this.registeredTodo.sort((a, b) => a.registerDate > b.registerDate ? sortingNum : sortingNum * -1)
-                    break;
-                case("expirationDate"):
-                    this.registeredTodo.sort((a, b) => a.expirationDate > b.expirationDate ? sortingNum : sortingNum * -1)
-                    break;
+                // 進捗は進捗リストのindexをもとにソート
                 case("progress"):
                     this.registeredTodo.sort((a, b) => this.progress.indexOf(a.progress) > this.progress.indexOf(b.progress) ? sortingNum : sortingNum * -1)
                     break;
                 default:
+                    this.registeredTodo.sort((a, b) => a[sortKey] >= b[sortKey] ? sortingNum : sortingNum * -1)
                     break;
             }
         },
 
-        sortTodo(sortKey: string): void {
-            
-            // 同一キーに対してソートした場合、昇順と降順を切り替える
-            if (this.sortStatus.sortKey == sortKey) {
-                this.sortStatus.sortDesc = !this.sortStatus.sortDesc
-            } else {
-                // 前回ソート時とソートキーが変更された場合は昇順固定
-                this.sortStatus.sortKey = sortKey
-                this.sortStatus.sortDesc = false
-            }
-            this.sortTodoWithSortOrder(sortKey, this.sortStatus.sortDesc)
-        },
-
+        // ソートマーク（↑ or ↓）を付与する。
         sortMark(columnName: string): string {
             if (this.sortStatus.sortKey != columnName) {
                 return ""
