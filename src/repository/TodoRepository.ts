@@ -1,8 +1,12 @@
 import {parse, format} from 'date-fns'
 
+// ローカルストレージ保存用のキー
+// TODO情報
 const KEY_TODO_ID_SEQUENCE = "todoIdSequence"
+// TODO情報のID管理
 const KEY_TOOD_INFO = "todoInfo"
 
+// TODOのEntity情報
 export type TodoInfo = {
     id: number
     task: string
@@ -11,16 +15,19 @@ export type TodoInfo = {
     progress: string
 }
 
+// TODO登録に必要な情報
 export type TodoRegisterInfo = {
     task: string
     expirationDate: string
     progress: string
 }
 
+// 進捗リスト（プルダウン項目）
 export const progress: string[] = ["未着手", "進行中", "完了"]
 
 export class TodoRepository {
 
+    // TODO全件取得
     getAll(): Array<TodoInfo> {
 
         const todo = localStorage.getItem(KEY_TOOD_INFO)
@@ -31,6 +38,7 @@ export class TodoRepository {
         }
     }
 
+    // TODO登録
     register(todoRegisterInfo: TodoRegisterInfo): void {
         // バリデーション
         const errorMessage = this.validate(todoRegisterInfo)
@@ -58,6 +66,7 @@ export class TodoRepository {
         localStorage.setItem(KEY_TOOD_INFO, JSON.stringify(todoList))
     }
 
+    // 更新
     update(id: number, progress: string) {
         const currentTodo = this.getAll()
         currentTodo.forEach(t => {
@@ -68,6 +77,7 @@ export class TodoRepository {
         localStorage.setItem(KEY_TOOD_INFO, JSON.stringify(currentTodo))
     }
 
+    // 削除
     deleteTodo(id: number): void {
         const currentTodo = this.getAll()
         const newTodo = currentTodo.filter(t => t.id !== id)
@@ -77,8 +87,10 @@ export class TodoRepository {
         localStorage.setItem(KEY_TOOD_INFO, JSON.stringify(newTodo))
     }
 
+    // TODO登録時のバリデーション
     private validate(todoRegisterInfo: TodoRegisterInfo): string {
 
+        // タスクの必須チェック
         let errorMessage = ""
         if (!todoRegisterInfo.task) {
             errorMessage += "タスクを入力してください。\n"
@@ -87,16 +99,15 @@ export class TodoRepository {
         if (todoRegisterInfo.expirationDate && parse(todoRegisterInfo.expirationDate, "yyyyMMdd", new Date()) == 'Invalid Date') {
             errorMessage += "期限はyyyyMMdd形式で入力してください。\n"
         }
+        // 進捗の必須チェック
         if (!todoRegisterInfo.progress) {
             errorMessage += "進捗を入力してください。"
-            // 進捗の整合性チェック。開発者ツールでのプルダウン書き換え対策。
-        } else if (todoRegisterInfo.progress && !progress.includes(todoRegisterInfo.progress)) {
-            errorMessage += "不正な進捗が設定されています。"
         }
 
         return errorMessage
     }
 
+    // ID払い出し
     private payoutId(): number {
         const currentMaxId = localStorage.getItem(KEY_TODO_ID_SEQUENCE)
         if (!currentMaxId) {
