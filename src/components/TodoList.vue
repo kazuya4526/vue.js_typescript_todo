@@ -1,10 +1,15 @@
 <template>
     <div>
-        <h5 class="text-center">TODO一覧</h5>
+        <h5 class="text-center bg-info">TODO一覧</h5>
         <div>
 
         </div>
         <div class="todo-table">
+            <a v-if="dispTarget !== 1" class="link-primary" href="javascript:void(0)" @click="switchDispTarget(1)" >全件</a>
+            <span v-else>全件</span>
+            <span>｜</span>
+            <a v-if="dispTarget !== 2" class="link-primary" href="javascript:void(0)" @click="switchDispTarget(2)" >完了タスク以外</a>
+            <span v-else>完了タスク以外</span>
             <table class="table table-bordered">
                 <thead>
                     <tr>
@@ -13,31 +18,29 @@
                         <th width="150px" class="text-center link-primary" :class="sortMark('registerDate')" @click="sortTodo('registerDate')">登録日</th>
                         <th width="150px" class="text-center link-primary" :class="sortMark('expirationDate')" @click="sortTodo('expirationDate')">期限</th>
                         <th width="120px" class="text-center link-primary" :class="sortMark('progress')" @click="sortTodo('progress')">進捗</th>
-                        <th width="100px" class="text-center">更新</th>
-                        <th width="100px" class="text-center">削除</th>
+                        <th width="100px" class="text-center"></th>
                     </tr>
                 </thead>
                 <tbody>
-                    <tr :class="decideRowColor(todo.progress, todo.expirationDate)" v-for="(todo, index) in registeredTodo" :key="todo.id">
+                    <tr :class="decideRowColor(todo.progress, todo.expirationDate)" v-for="(todo, index) in dispTodo" :key="todo.id">
                         <td>{{index + 1}}</td>
                         <td>{{todo.task}}</td>
                         <td class="text-center">{{formatDate(todo.registerDate)}}</td>
                         <td class="text-center">{{formatDate(todo.expirationDate)}}</td>
                         <td>
-                            <select class="form-control text-center" v-model="todo.progress">
+                            <select class="form-control text-center" v-model="todo.progress" @change="update(todo.id, todo.progress)">
                                 <option>未着手</option>
                                 <option>進行中</option>
                                 <option>完了</option>
                             </select>
                         </td>
-                        <td class="text-center"><button class="btn btn-primary" @click="update(todo.id, todo.progress)">更新</button></td>
                         <td class="text-center"><button class="btn btn-primary" @click="deleteTodo(todo.id)">削除</button></td>
                     </tr>
                 </tbody>
             </table>
         </div>
 
-        <h5 class="text-center">TODO登録</h5>
+        <h5 class="text-center bg-info">TODO登録</h5>
         <div class="container todo-form">
             <div class="row">
                 <label class="form-label col-2" for="task">タスク</label>
@@ -80,10 +83,13 @@ const todoRepository: TodoRepository = new TodoRepository()
 // dataブロックで保持するオブジェクトの型情報
 type DataType = {
     progress: Array<string>
-    registeredTodo: Array<TodoInfo>
+    allTodo: Array<TodoInfo>
+    dispTodo: Array<TodoInfo>
     todoForm: TodoRegisterInfo
     message: string,
-    sortStatus: SortStatus
+    sortStatus: SortStatus,
+    // 表示対象（1: 全件、2: 完了以外）
+    dispTarget: number
 }
 
 // 現在のソート状態を表すオブジェクトの型情報
@@ -98,7 +104,8 @@ export default Vue.extend({
     data(): DataType {
         return {
             progress: progress,
-            registeredTodo: [],
+            allTodo: [],
+            dispTodo: [],
             todoForm: {
                 task: "",
                 expirationDate: "",
@@ -106,23 +113,26 @@ export default Vue.extend({
             },
             message: "",
             sortStatus: {
-                sortKey: "progress",
+                sortKey: "expirationDate",
                 sortDesc: false
-            }
+            },
+            dispTarget: 2
         }
     },
 
-    // TODO一覧を取得し表示
+    // 初期表示処理。TODO全件取得し、完了タスク以外を表示する。
     created(): void {
         this.getAll()
+
     },
 
     methods: {
 
-        // TODO一覧を取得してdataに設定。初期ソート条件（進捗の昇順）でソートする。
+        // TODO一覧を取得してdataに設定。初期ソート条件（期限の昇順）でソートする。
         getAll(): void {
-            this.registeredTodo = todoRepository.getAll()
-            this.sortTodoWithSortOrder("progress", false)
+            this.allTodo = todoRepository.getAll()
+            this.sortTodoWithSortOrder("expirationDate", false)
+            this.switchDispTarget(this.dispTarget)
         },
 
         // TODO登録。
@@ -157,10 +167,11 @@ export default Vue.extend({
                 return
             }
             this.message = "更新しました。"
+            this.getAll()
         },
 
         // TODO削除
-        deleteTodo(id: number) {
+        deleteTodo(id: number): void {
             try {
                 todoRepository.deleteTodo(id)
             } catch (e) {
@@ -229,10 +240,10 @@ export default Vue.extend({
             switch(sortKey) {
                 // 進捗は進捗リストのindexをもとにソート
                 case("progress"):
-                    this.registeredTodo.sort((a, b) => this.progress.indexOf(a.progress) > this.progress.indexOf(b.progress) ? sortingNum : sortingNum * -1)
+                    this.dispTodo.sort((a, b) => this.progress.indexOf(a.progress) > this.progress.indexOf(b.progress) ? sortingNum : sortingNum * -1)
                     break;
                 default:
-                    this.registeredTodo.sort((a, b) => a[sortKey] >= b[sortKey] ? sortingNum : sortingNum * -1)
+                    this.dispTodo.sort((a, b) => a[sortKey] >= b[sortKey] ? sortingNum : sortingNum * -1)
                     break;
             }
         },
@@ -246,6 +257,16 @@ export default Vue.extend({
                 return "sort_desc"
             } else {
                 return "sort_asc"
+            }
+        },
+
+        // 表示対象TODOを切り替える（1:全件, 2: 完了以外）
+        switchDispTarget(target: number): void {
+            this.dispTarget = target
+            if (target === 1) {
+                this.dispTodo = this.allTodo
+            } else if (target === 2) {
+                this.dispTodo = this.allTodo.filter(todo => todo.progress !== this.progress[2])
             }
         }
     }
