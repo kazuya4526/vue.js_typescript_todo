@@ -1,9 +1,9 @@
 <template>
     <div>
-        <h5 class="text-center bg-info">TODO一覧</h5>
-        <div>
-
+        <div v-if="loading" class="loading-background">
+            <img src="../assets/loading-l-3.gif" alt="" class="loading">
         </div>
+        <h5 class="text-center bg-info">TODO一覧</h5>
         <div class="todo-table">
             <a v-if="dispTarget !== 1" class="link-primary" href="javascript:void(0)" @click="switchDispTarget(1)" >全件</a>
             <span v-else>全件</span>
@@ -15,26 +15,26 @@
                     <tr>
                         <th width="50px">No</th>
                         <th class="link-primary" :class="sortMark('task')" @click="sortTodo('task')">タスク</th>
-                        <th width="150px" class="text-center link-primary" :class="sortMark('registerDate')" @click="sortTodo('registerDate')">登録日</th>
-                        <th width="150px" class="text-center link-primary" :class="sortMark('expirationDate')" @click="sortTodo('expirationDate')">期限</th>
+                        <th width="150px" class="text-center link-primary" :class="sortMark('register_date')" @click="sortTodo('register_date')">登録日</th>
+                        <th width="150px" class="text-center link-primary" :class="sortMark('expiration_date')" @click="sortTodo('expiration_date')">期限</th>
                         <th width="120px" class="text-center link-primary" :class="sortMark('progress')" @click="sortTodo('progress')">進捗</th>
                         <th width="100px" class="text-center"></th>
                     </tr>
                 </thead>
                 <tbody>
-                    <tr :class="decideRowColor(todo.progress, todo.expirationDate)" v-for="(todo, index) in dispTodo" :key="todo.id">
+                    <tr :class="decideRowColor(todo.progress, todo.expiration_date)" v-for="(todo, index) in dispTodo" :key="todo.id">
                         <td>{{index + 1}}</td>
                         <td>{{todo.task}}</td>
-                        <td class="text-center">{{formatDate(todo.registerDate)}}</td>
-                        <td class="text-center">{{formatDate(todo.expirationDate)}}</td>
+                        <td class="text-center">{{formatDate(todo.register_date)}}</td>
+                        <td class="text-center">{{formatDate(todo.expiration_date)}}</td>
                         <td>
-                            <select class="form-control text-center" v-model="todo.progress" @change="update(todo.id, todo.progress)">
-                                <option>未着手</option>
-                                <option>進行中</option>
-                                <option>完了</option>
+                            <select class="form-control text-center" v-model="todo.progress" @change="update(todo.todo_id, todo.progress)">
+                                <option value="1">未着手</option>
+                                <option value="2">進行中</option>
+                                <option value="3">完了</option>
                             </select>
                         </td>
-                        <td class="text-center"><button class="btn btn-primary" @click="deleteTodo(todo.id)">削除</button></td>
+                        <td class="text-center"><button class="btn btn-primary" @click="deleteTodo(todo.todo_id)">削除</button></td>
                     </tr>
                 </tbody>
             </table>
@@ -51,14 +51,14 @@
             <div class="row">
                 <label class="form-label col-2" for="expier">期限</label>
                 <div class="col-10">
-                    <input class="form-control" type="text" id="expire" v-model="todoForm.expirationDate">
+                    <input class="form-control" type="date" id="expire" v-model="todoForm.expirationDate">
                 </div>
             </div>
             <div class="row">
                 <label class="form-label col-2" for="progress">進捗</label>
                 <div class="col-10">
                     <select class="form-control" id="progress" v-model="todoForm.progress">
-                        <option v-for="prog in progress" :key="prog">{{prog}}</option>
+                        <option v-for="progress in Object.keys(progressList)" :key="progress" :value="progress">{{progressList[progress]}}</option>
                     </select>
                 </div>
             </div>
@@ -74,22 +74,27 @@
 </template>
 
 <script lang="ts">
-import {Component, Prop, Emit, Vue} from 'vue-property-decorator'
-import {TodoRepository, TodoInfo, TodoRegisterInfo, progress} from '@/repository/TodoRepository.ts'
+import {Vue} from 'vue-property-decorator'
+import { AxiosError } from 'axios'
+import {TodoRepository, TodoInfo, TodoRegisterInfo, progressList} from '@/repository/TodoRepository'
 import {parse, getDate, getMonth, getYear, isAfter} from 'date-fns'
 
 const todoRepository: TodoRepository = new TodoRepository()
 
 // dataブロックで保持するオブジェクトの型情報
 type DataType = {
-    progress: Array<string>
+    progressList: {[key: number]: string}
     allTodo: Array<TodoInfo>
     dispTodo: Array<TodoInfo>
     todoForm: TodoRegisterInfo
     message: string,
     sortStatus: SortStatus,
     // 表示対象（1: 全件、2: 完了以外）
-    dispTarget: number
+    dispTarget: number,
+    expirationDateSave: string,
+    // ローディング画像表示用フラグ
+    // API呼出し中に表示させる
+    loading: boolean
 }
 
 // 現在のソート状態を表すオブジェクトの型情報
@@ -103,83 +108,123 @@ export default Vue.extend({
 
     data(): DataType {
         return {
-            progress: progress,
+            progressList: progressList,
             allTodo: [],
             dispTodo: [],
             todoForm: {
                 task: "",
                 expirationDate: "",
-                progress: progress[0]
+                progress: "1"
             },
             message: "",
             sortStatus: {
-                sortKey: "expirationDate",
+                sortKey: "expiration_date",
                 sortDesc: false
             },
-            dispTarget: 2
+            dispTarget: 2,
+            expirationDateSave: "",
+            loading: false
         }
     },
 
     // 初期表示処理。TODO全件取得し、完了タスク以外を表示する。
     created(): void {
+        this.loading = true
         this.getAll()
-
     },
 
     methods: {
 
         // TODO一覧を取得してdataに設定。初期ソート条件（期限の昇順）でソートする。
         getAll(): void {
-            this.allTodo = todoRepository.getAll()
-            this.sortTodoWithSortOrder("expirationDate", false)
-            this.switchDispTarget(this.dispTarget)
+            todoRepository.getAll((data: { todo: TodoInfo[] }) => {
+                this.allTodo = data.todo
+                this.sortTodoWithSortOrder("expiration_date", false)
+                this.switchDispTarget(this.dispTarget)
+                this.loading = false
+            }, this.handleError)
         },
 
         // TODO登録。
         register(): void {
-            // 登録。エラーが発生した場合はmessageを設定し処理終了。
-            this.message = ""
-            try {
-                todoRepository.register(this.todoForm)
-            } catch (e) {
-                this.message = e.message
-                return
+
+            this.loading = true
+
+            // フォームにyyyy/MM/dd形式で設定されるので、yyyyMMdd形式に変換
+            if(this.todoForm.expirationDate) {
+                this.expirationDateSave = this.todoForm.expirationDate
+                const s = this.todoForm.expirationDate.split("-")
+                this.todoForm.expirationDate = s[0] + s[1] + s[2]
             }
 
-            // Formのクリア
-            this.todoForm.task = ""
-            this.todoForm.expirationDate = ""
-            this.todoForm.progress = this.progress[0]
+            todoRepository.register(this.todoForm, 
+                // バリデーションエラー時
+                (validationErrorMessage: string) => {
+                    this.message = validationErrorMessage
+                    this.loading = false
+                }, 
+                // 正常終了
+                (_: string) => {
+                    // Formのクリア
+                    this.todoForm.task = ""
+                    this.todoForm.expirationDate = ""
+                    this.todoForm.progress = "1"
 
-            this.message = "登録しました。"
+                    this.message = "登録しました。"
 
-            // データ再取得
-            this.getAll()
-            
+                    // データ再取得
+                    this.getAll()
+                }, 
+                // APIエラー
+                this.handleError
+            )
+            this.todoForm.expirationDate = this.expirationDateSave
         },
 
         // TODO進捗更新
         update(id: number, progress: string): void {
-            try {
-                todoRepository.update(id, progress)
-            } catch (e) {
-                this.message = e.message
-                return
-            }
-            this.message = "更新しました。"
-            this.getAll()
+
+            this.loading = true
+            todoRepository.update(id, parseInt(progress), 
+                // バリデーションエラー時
+                (validationErrorMessage: string) => {
+                    this.message = validationErrorMessage
+                },
+                // API正常終了
+                (_: string) => {
+                    this.message = "更新しました。"
+                    this.switchDispTarget(this.dispTarget)
+                    this.loading = false
+                }, 
+                // APIエラー
+                this.handleError
+            )
         },
 
         // TODO削除
         deleteTodo(id: number): void {
-            try {
-                todoRepository.deleteTodo(id)
-            } catch (e) {
-                this.message = e.message
-                return
+            this.loading = true
+            todoRepository.deleteTodo(id, 
+                // API正常終了
+                (_: string) => {
+                    this.message="削除しました。"
+                    this.getAll()
+                },
+                // APIエラー
+                this.handleError
+            )
+        },
+
+        // 共通エラーハンドリング
+        handleError(error: AxiosError<{message: string}>): void {
+            // ネットワークエラーまたは5XXエラーの場合はシステムエラー画面に遷移
+            if (!error.response || error.response.status >= 500) {
+                this.$router.replace("/error")
+            } else {
+                // それ以外のエラー（4XXを想定）は、メッセージを画面下部に表示
+                this.message = error.response.data.message
             }
-            this.message="削除しました。"
-            this.getAll()
+            this.loading = false
         },
 
         // 日付項目を、画面表示用に加工。
@@ -200,17 +245,17 @@ export default Vue.extend({
             // 期限切れの場合は赤
             const eDate = parse(expirationDate, "yyyyMMdd", new Date())
             const cDate = new Date()
-            if (progress != this.progress[2] && isAfter(cDate, eDate)) {
+            if (progress != "3" && isAfter(cDate, eDate)) {
                 return "table-danger"
             }
 
             // 進行中：緑、完了：灰
             switch(progress) {
-                case(this.progress[0]):
+                case("1"):
                     return ""
-                case(this.progress[1]):
+                case("2"):
                     return "table-success"
-                case(this.progress[2]):
+                case("3"):
                     return "table-secondary"
                 default:
                     return ""
@@ -237,15 +282,7 @@ export default Vue.extend({
             this.sortStatus.sortDesc = sortDesc
 
             const sortingNum = sortDesc ? -1 : 1
-            switch(sortKey) {
-                // 進捗は進捗リストのindexをもとにソート
-                case("progress"):
-                    this.dispTodo.sort((a, b) => this.progress.indexOf(a.progress) > this.progress.indexOf(b.progress) ? sortingNum : sortingNum * -1)
-                    break;
-                default:
-                    this.dispTodo.sort((a, b) => a[sortKey] >= b[sortKey] ? sortingNum : sortingNum * -1)
-                    break;
-            }
+            this.dispTodo.sort((a, b) => a[sortKey] >= b[sortKey] ? sortingNum : sortingNum * -1)
         },
 
         // ソートマーク（↑ or ↓）を付与する。
@@ -266,7 +303,7 @@ export default Vue.extend({
             if (target === 1) {
                 this.dispTodo = this.allTodo
             } else if (target === 2) {
-                this.dispTodo = this.allTodo.filter(todo => todo.progress !== this.progress[2])
+                this.dispTodo = this.allTodo.filter(todo => this.progressList[todo.progress] !== this.progressList[3])
             }
         }
     }
@@ -290,5 +327,22 @@ export default Vue.extend({
 }
 .sort_desc:after {
     content: '↓'
+}
+.loading {
+    position: fixed;
+    z-index: 1000;
+    top: 50%;
+    left: 50%;
+    background-color: darkgrey;
+}
+.loading-background {
+    position: absolute;
+    width: 120%;
+    height: 120%;
+    top: 0px;
+    left: 0px;
+    z-index: 999;
+    background-color: white;
+    opacity: 0.5;
 }
 </style>
