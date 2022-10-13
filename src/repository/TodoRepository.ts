@@ -1,7 +1,7 @@
 import {parse} from 'date-fns'
 import axios, {AxiosResponse, AxiosError} from 'axios'
 
-const BASE_URL = process.env.VUE_APP_API_BASE_URL + "/todo"
+const BASE_URL = process.env.VUE_APP_API_BASE_URL + "/todo/"
 
 // TODOのEntity情報
 export type TodoInfo = {
@@ -19,7 +19,6 @@ export type TodoRegisterInfo = {
     expirationDate: string
     progress: string
 }
-
 // 進捗リスト（プルダウン項目）
 export const progressList: {[key: number]: string} = {1: "未着手", 2:"進行中", 3:"完了"}
 
@@ -28,9 +27,9 @@ export class TodoRepository {
     // TODO全件取得
     getAll(callbackSuccess: Function, callbackFail: Function): void {
 
-        axios.get(BASE_URL, {withCredentials: true})
+        axios.get(BASE_URL, {headers: {"Authorization": "Bearer " + localStorage.getItem("accessToken")}})
             .then((res: AxiosResponse<Array<TodoInfo>>) => callbackSuccess(res.data))
-            .catch((error: AxiosError<{message: string}>) => callbackFail(error))
+            .catch((error: AxiosError<{detail: string}>) => callbackFail(error))
 
     }
 
@@ -47,35 +46,37 @@ export class TodoRepository {
         // 登録
         axios.post(BASE_URL, {
                 'task': todoRegisterInfo.task, 
-                'expirationDate': todoRegisterInfo.expirationDate,
+                'expiration_date': todoRegisterInfo.expirationDate ? todoRegisterInfo.expirationDate : null,
                 'progress': parseInt(String(todoRegisterInfo.progress))
-            }, {withCredentials: true})
+            }, {headers: {"Authorization": "Bearer " + localStorage.getItem("accessToken")}})
             .then((res: AxiosResponse<string>) => callbackSuccess(res.data))
-            .catch((error: AxiosError<{message: string}>) => callbackFail(error))
+            .catch((error: AxiosError<{detail: string}>) => callbackFail(error))
     }
 
     // 更新
-    update(id: number, progress: number, callbackValidationError: Function, callbackSuccess: Function, callbackFail: Function): void {
+    update(todo_id: number, progress: number, version: number, callbackValidationError: Function, callbackSuccess: Function, callbackFail: Function): void {
 
         if (!progress) {
             callbackValidationError("進捗を入力してください。")
             return
         }
         
-        axios.put(BASE_URL, {'todoId': id, 'progress': progress}, {withCredentials: true})
+        axios.put(BASE_URL, {
+                'todo_id': todo_id, 
+                'progress': progress,
+                'version': version    
+            }, {headers: {"Authorization": "Bearer " + localStorage.getItem("accessToken")}})
             .then((res: AxiosResponse<string>) => callbackSuccess(res.data))
-            .catch((error: AxiosError<{message: string}>) => callbackFail(error))
+            .catch((error: AxiosError<{detail: string}>) => callbackFail(error))
 
     }
 
     // 削除
-    deleteTodo(id: number, callbackSuccess: Function, callbackFail: Function): void {
-
-        console.log(id)
+    deleteTodo(id: number, version: number, callbackSuccess: Function, callbackFail: Function): void {
         
-        axios.delete(BASE_URL + '/' + id, {withCredentials: true})
+        axios.delete(BASE_URL + id + "?version=" + version, {headers: {"Authorization": "Bearer " + localStorage.getItem("accessToken")}})
             .then((res: AxiosResponse<string>) => callbackSuccess(res.data))
-            .catch((error: AxiosError<{message: string}>) => callbackFail(error))
+            .catch((error: AxiosError<{detail: string}>) => callbackFail(error))
 
     }
 

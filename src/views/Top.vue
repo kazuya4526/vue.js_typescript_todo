@@ -19,7 +19,8 @@ export default Vue.extend({
     },
 
     created(): void {
-        if (!localStorage.getItem("userName")) {
+        if (!localStorage.getItem("accessToken")) {
+            console.log("accessToken取得失敗")
             this.$router.push("/")
         }
     }

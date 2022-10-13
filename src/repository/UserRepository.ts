@@ -1,6 +1,11 @@
 import axios, {AxiosResponse, AxiosError} from 'axios'
 
-const BASE_URL = process.env.VUE_APP_API_BASE_URL
+const BASE_URL = process.env.VUE_APP_API_BASE_URL + "/auth"
+
+export type Token = {
+    access_token: string,
+    token_type: string
+}
 
 export class UserRepository {
 
@@ -12,9 +17,13 @@ export class UserRepository {
             return
         }
 
-        axios.post(BASE_URL + '/signup', {'userName': userName, 'password': password}, {withCredentials: true})
+        const params = new URLSearchParams()
+        params.append('username', userName)
+        params.append('password', password)        
+
+        axios.post(BASE_URL + '/signup', params, {withCredentials: true})
             .then((res: AxiosResponse<string>) => callbackSuccess(res.data))
-            .catch((error: AxiosError<{message: string}>) => callbackFail(error))
+            .catch((error: AxiosError<{detail: string}>) => callbackFail(error))
     }
 
     login(userName: string, password: string, callbackValidationError: Function, callbackSuccess: Function, callbackFail: Function): void {
@@ -25,15 +34,13 @@ export class UserRepository {
             return
         }
 
-        axios.post(BASE_URL + "/login", {'userName': userName, 'password': password}, {withCredentials: true})
-            .then((res: AxiosResponse<string>) => callbackSuccess(res.data))
-            .catch((error: AxiosError<{message: string}>) => callbackFail(error))
-    }
+        const params = new URLSearchParams()
+        params.append('username', userName)
+        params.append('password', password)      
 
-    logout(callbackSuccess: Function, callbackFail: Function): void {
-        axios.post(BASE_URL + "/logout", {}, {withCredentials: true})
+        axios.post(BASE_URL + "/token", params, {withCredentials: true})
             .then((res: AxiosResponse<string>) => callbackSuccess(res.data))
-            .catch((error: AxiosError<{message: string}>) => callbackFail(error))
+            .catch((error: AxiosError<{detail: string}>) => callbackFail(error))
     }
 
     private validate(userName: string, password: string): string {

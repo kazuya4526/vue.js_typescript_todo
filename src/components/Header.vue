@@ -9,9 +9,6 @@
 
 <script lang="ts">
 import {Vue} from 'vue-property-decorator'
-import {UserRepository} from '@/repository/UserRepository.ts'
-
-const userRepository: UserRepository = new UserRepository()
 
 type DataType = {
     showLogoutButton: boolean
@@ -32,11 +29,7 @@ export default Vue.extend({
     methods: {
 
         logout(): void {
-            userRepository.logout(this.afterLogout, this.afterLogout)
-        },
-
-        afterLogout(): void {
-            localStorage.setItem("userName", "")
+            localStorage.setItem("accessToken", "")
             this.$router.push('/')
         }
     }

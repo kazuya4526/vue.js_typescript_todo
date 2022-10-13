@@ -30,7 +30,7 @@
 <script lang="ts">
 import {Vue} from 'vue-property-decorator'
 import { AxiosError } from 'axios'
-import {UserRepository} from '@/repository/UserRepository'
+import {UserRepository, Token} from '@/repository/UserRepository'
 import Header from '@/components/Header.vue'
 
 const userRepository: UserRepository = new UserRepository()
@@ -64,17 +64,21 @@ export default Vue.extend({
 
         login(): void {
             this.loading = true
-            userRepository.login(this.userName, this.password, this.validationErrorHandle, this.afterLoginOrSignup, this.handleError)
+            userRepository.login(this.userName, this.password, this.validationErrorHandle, (data: Token) => {
+                localStorage.setItem("accessToken", data.access_token)
+                this.$router.push('/top')
+                this.loading = false
+            }, this.handleError)
         },
 
         signup(): void {
             this.loading = true
-            userRepository.signup(this.userName, this.password, this.validationErrorHandle, this.afterLoginOrSignup, this.handleError)
+            userRepository.signup(this.userName, this.password, this.validationErrorHandle, () => {this.login()}, this.handleError)
         },
 
-        afterLoginOrSignup(_: string): void {
+        afterLoginOrSignup(data: Token): void {
 
-            localStorage.setItem("userName", this.userName)
+            localStorage.setItem("accessToken", data.access_token)
 
             this.$router.push('/top')
 
@@ -87,13 +91,14 @@ export default Vue.extend({
         },
 
         // 共通エラーハンドリング
-        handleError(error: AxiosError<{message: string}>): void {
+        handleError(error: AxiosError<{detail: string}>): void {
+            console.log("eeeeee")
             // ネットワークエラーまたは5XXエラーの場合はシステムエラー画面に遷移
             if (!error.response || error.response.status >= 500) {
                 // this.$router.replace("/error")
             } else {
                 // それ以外のエラー（4XXを想定）は、メッセージを画面下部に表示
-                this.message = error.response.data.message
+                this.message = error.response.data.detail
             }
             this.loading = false
         }

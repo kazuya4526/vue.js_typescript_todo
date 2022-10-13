@@ -28,13 +28,13 @@
                         <td class="text-center">{{formatDate(todo.register_date)}}</td>
                         <td class="text-center">{{formatDate(todo.expiration_date)}}</td>
                         <td>
-                            <select class="form-control text-center" v-model="todo.progress" @change="update(todo.todo_id, todo.progress)">
+                            <select class="form-control text-center" v-model="todo.progress" @change="update(todo.todo_id, todo.progress, todo.version)">
                                 <option value="1">未着手</option>
                                 <option value="2">進行中</option>
                                 <option value="3">完了</option>
                             </select>
                         </td>
-                        <td class="text-center"><button class="btn btn-primary" @click="deleteTodo(todo.todo_id)">削除</button></td>
+                        <td class="text-center"><button class="btn btn-primary" @click="deleteTodo(todo.todo_id, todo.version)">削除</button></td>
                     </tr>
                 </tbody>
             </table>
@@ -137,8 +137,8 @@ export default Vue.extend({
 
         // TODO一覧を取得してdataに設定。初期ソート条件（期限の昇順）でソートする。
         getAll(): void {
-            todoRepository.getAll((data: { todo: TodoInfo[] }) => {
-                this.allTodo = data.todo
+            todoRepository.getAll((data: TodoInfo[]) => {
+                this.allTodo = data
                 this.sortTodoWithSortOrder("expiration_date", false)
                 this.switchDispTarget(this.dispTarget)
                 this.loading = false
@@ -169,6 +169,7 @@ export default Vue.extend({
                     this.todoForm.task = ""
                     this.todoForm.expirationDate = ""
                     this.todoForm.progress = "1"
+                    this.expirationDateSave = ""
 
                     this.message = "登録しました。"
 
@@ -182,10 +183,10 @@ export default Vue.extend({
         },
 
         // TODO進捗更新
-        update(id: number, progress: string): void {
+        update(id: number, progress: string, version: number): void {
 
             this.loading = true
-            todoRepository.update(id, parseInt(progress), 
+            todoRepository.update(id, parseInt(progress), version,  
                 // バリデーションエラー時
                 (validationErrorMessage: string) => {
                     this.message = validationErrorMessage
@@ -193,6 +194,12 @@ export default Vue.extend({
                 // API正常終了
                 (_: string) => {
                     this.message = "更新しました。"
+                    // バージョンのインクリメント
+                    for(let i = 0; i < this.allTodo.length; i++) {
+                        if (this.allTodo[i].todo_id === id) {
+                            this.allTodo[i].version += 1
+                        }
+                    }
                     this.switchDispTarget(this.dispTarget)
                     this.loading = false
                 }, 
@@ -202,9 +209,9 @@ export default Vue.extend({
         },
 
         // TODO削除
-        deleteTodo(id: number): void {
+        deleteTodo(id: number, version: number): void {
             this.loading = true
-            todoRepository.deleteTodo(id, 
+            todoRepository.deleteTodo(id, version, 
                 // API正常終了
                 (_: string) => {
                     this.message="削除しました。"
@@ -216,13 +223,18 @@ export default Vue.extend({
         },
 
         // 共通エラーハンドリング
-        handleError(error: AxiosError<{message: string}>): void {
+        handleError(error: AxiosError<{detail: string}>): void {
             // ネットワークエラーまたは5XXエラーの場合はシステムエラー画面に遷移
             if (!error.response || error.response.status >= 500) {
                 this.$router.replace("/error")
+            } else if (error.response.status = 401) {
+                // 認証エラーの場合（401）は、localStorageのaccessTokenをクリアしてログイン画面へ遷移
+                localStorage.setItem("accessToken", "")
+                alert(error.response.data.detail)
+                this.$router.push("/")
             } else {
                 // それ以外のエラー（4XXを想定）は、メッセージを画面下部に表示
-                this.message = error.response.data.message
+                this.message = error.response.data.detail
             }
             this.loading = false
         },
@@ -241,7 +253,6 @@ export default Vue.extend({
 
         // 進捗と期限によって列色を変える。優先順位は期限 > 進捗。
         decideRowColor(progress: string, expirationDate: string): string {
-
             // 期限切れの場合は赤
             const eDate = parse(expirationDate, "yyyyMMdd", new Date())
             const cDate = new Date()
@@ -249,18 +260,15 @@ export default Vue.extend({
                 return "table-danger"
             }
 
-            // 進行中：緑、完了：灰
-            switch(progress) {
-                case("1"):
-                    return ""
-                case("2"):
-                    return "table-success"
-                case("3"):
-                    return "table-secondary"
-                default:
-                    return ""
+            if (progress == "1") {
+                return ""
+            } else if (progress == "2") {
+                return "table-success"
+            } else if (progress == "3") {
+                return "table-secondary"
+            } else {
+                return ""
             }
-            
         },
 
         // ソート。
@@ -300,6 +308,9 @@ export default Vue.extend({
         // 表示対象TODOを切り替える（1:全件, 2: 完了以外）
         switchDispTarget(target: number): void {
             this.dispTarget = target
+            if (!this.allTodo) {
+                this.allTodo = []
+            }
             if (target === 1) {
                 this.dispTodo = this.allTodo
             } else if (target === 2) {
